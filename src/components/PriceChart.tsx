@@ -299,8 +299,8 @@ const PriceChart: React.FC<PriceChartProps> = ({ symbol = 'BTC-USD' }) => {
             ))}
           </select>
         </div>
-        <div className="flex justify-between gap-4 w-[700px] font-bold mx-4 text-sm">
-          <div className="flex-auto text-left w-1/4">
+        <div className="flex justify-between gap-4 w-[700px] font-semibold mx-4 text-sm">
+          <div className="flex-auto text-left w-1/6">
             <div className="text-gray-400 text-xs">LAST PRICE (24H)</div>
             <div>{intl.format(lastPrice as number)} &nbsp;
               <span className={lastPriceChangePercent as number ? "text-[#24AC74]": "text-[#F0616D]"}>
@@ -308,15 +308,15 @@ const PriceChart: React.FC<PriceChartProps> = ({ symbol = 'BTC-USD' }) => {
               </span>
             </div>
           </div>
-          <div className="flex-auto text-left w-1/4">
+          <div className="flex-auto text-left w-1/6">
             <div className="text-gray-400 text-xs">24H VOLUME</div>
             <div>{intl.format(volume24h as number * 100000)}</div>
           </div>
-          <div className="flex-auto text-left w-1/4">
+          <div className="flex-auto text-left w-1/8">
             <div className="text-gray-400 text-xs">24H HIGH</div>
             <div>{intl.format(high24h as number)} </div>
           </div>
-          <div className="flex-auto text-left w-1/4">
+          <div className="flex-auto text-left w-1/8">
             <div className="text-gray-400 text-xs">24H LOW</div>
             <div>{intl.format(low24h as number)}</div>
           </div>
