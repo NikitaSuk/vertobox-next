@@ -29,9 +29,7 @@ const INTERVALS: Interval[] = [
   { label: '1 minute', seconds: 60, granularity: 60 },
   { label: '5 minutes', seconds: 300, granularity: 300 },
   { label: '15 minutes', seconds: 900, granularity: 900 },
-  { label: '30 minutes', seconds: 1800, granularity: 1800 },
   { label: '1 hour', seconds: 3600, granularity: 3600 },
-  { label: '2 hours', seconds: 7200, granularity: 7200 },
   { label: '6 hours', seconds: 21600, granularity: 21600 },
   { label: '1 day', seconds: 86400, granularity: 86400 },
 ];
@@ -49,6 +47,15 @@ const PriceChart: React.FC<PriceChartProps> = ({ symbol = 'BTC-USD' }) => {
   });
   const [selectedInterval, setSelectedInterval] = useState<Interval>(INTERVALS[0]);
   const candlestickSeriesRef = useRef<any>(null);
+  const [lastPrice, setLastPrice] = useState<number | null>(null);
+  const [lastPriceChangePercent, setLastPriceChangePercent] = useState<number | null>(null);
+  const [volume24h, setVolume24h] = useState<number | null>(null);
+  const [high24h, setHigh24h] = useState<number | null>(null);
+  const [low24h, setLow24h] = useState<number | null>(null);
+  const intl = new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+});
 
   useEffect(() => {
     if (!chartContainerRef.current) return;
@@ -58,12 +65,27 @@ const PriceChart: React.FC<PriceChartProps> = ({ symbol = 'BTC-USD' }) => {
       height: 400,
       layout: {
         background: {
-          // type: ColorType.Solid, color: "#FFFFFF80"
+          type: ColorType.Solid, color: '#00000000'
         },
-        // textColor: "#fff"
+        textColor: '#FFF'
+      },
+      grid: {
+        vertLines: {
+          visible: false
+        },
+        horzLines: {
+          color: '#FFFFFF40'
+        }
       }
     });
-    const candlestickSeries = chart.addCandlestickSeries();
+    const candlestickSeries = chart.addCandlestickSeries({
+      upColor: '#24AC74',
+      downColor: '#F0616D',
+      borderUpColor: '#24AC74',
+      borderDownColor: '#F0616D',
+      wickUpColor: '#24AC74',
+      wickDownColor: '#F0616D'
+    });
     candlestickSeriesRef.current = candlestickSeries;
     chartRef.current = chart;
 
@@ -81,7 +103,7 @@ const PriceChart: React.FC<PriceChartProps> = ({ symbol = 'BTC-USD' }) => {
       try {
         // Clear existing data first
         candlestickSeriesRef.current.setData([]);
-        
+
         const response = await axios.get(
           `https://api.exchange.coinbase.com/products/${symbol}/candles?granularity=${selectedInterval.granularity}`
         );
@@ -95,7 +117,7 @@ const PriceChart: React.FC<PriceChartProps> = ({ symbol = 'BTC-USD' }) => {
 
         initialData.sort((a: any, b: any) => (a.time as number) - (b.time as number));
         candlestickSeriesRef.current.setData(initialData);
-        
+
         if (initialData.length > 0) {
           const lastCandle = initialData[initialData.length - 1];
           setCurrentMinuteData(lastCandle);
@@ -131,6 +153,15 @@ const PriceChart: React.FC<PriceChartProps> = ({ symbol = 'BTC-USD' }) => {
         const timestamp = Math.floor(Date.now() / 1000);
         // Calculate the start of the current interval
         const currentInterval = Math.floor(timestamp / selectedInterval.seconds) * selectedInterval.seconds;
+
+        // Update dynamic data
+        setLastPrice(price);
+        // Assuming you can calculate or fetch the change percentage, volume, high, and low from WebSocket data or another API
+        // This part would need to be adjusted based on actual data structure or additional API calls
+        setLastPriceChangePercent(calculatePriceChangePercent(price)); // You need to define this function
+        setVolume24h(data.volume_24h); // Example, adjust based on data structure
+        setHigh24h(data.high_24h); // Example, adjust based on data structure
+        setLow24h(data.low_24h); // Example, adjust based on data structure
 
         // New interval started
         if (currentInterval !== minuteTrackingRef.current.currentMinute) {
@@ -172,17 +203,33 @@ const PriceChart: React.FC<PriceChartProps> = ({ symbol = 'BTC-USD' }) => {
             low: Math.min(minuteTrackingRef.current.low, price),
             close: price // Current price is the latest close
           };
-          
+
           minuteTrackingRef.current.high = updatedCandlestick.high;
           minuteTrackingRef.current.low = updatedCandlestick.low;
-          
+
           setCurrentMinuteData(updatedCandlestick);
           candlestickSeriesRef.current.update(updatedCandlestick);
         }
       }
     };
 
-    ws.onerror = (error) => console.error('WebSocket Error:', error);
+    ws.onerror = (error) => console.log('WebSocket Error:', error);
+
+      // Function to fetch 24h stats if not available from WebSocket
+      const fetch24hStats = async () => {
+        try {
+          const response = await axios.get(`https://api.exchange.coinbase.com/products/${symbol}/stats`);
+          setLastPrice(Number(response.data.last));
+          setLastPriceChangePercent(calculatePriceChangePercent(Number(response.data.last)));
+          setVolume24h(Number(response.data.volume));
+          setHigh24h(Number(response.data.high));
+          setLow24h(Number(response.data.low));
+        } catch (error) {
+          console.error('Error fetching 24h stats:', error);
+        }
+      };
+  
+      fetch24hStats();
 
     // Handle mouse hover to change time scale format
     let isHovering = false;
@@ -195,7 +242,7 @@ const PriceChart: React.FC<PriceChartProps> = ({ symbol = 'BTC-USD' }) => {
           const month = date.toLocaleString('default', { month: 'short' });
           const year = date.getFullYear().toString().slice(-2);
           const minutes = String(date.getMinutes()).padStart(2, '0');
-          return `${day} ${month} '${year} ${date.getHours()}:${minutes}`;
+          return `${date.getHours()}:${minutes}`;
         }
       });
     };
@@ -226,25 +273,56 @@ const PriceChart: React.FC<PriceChartProps> = ({ symbol = 'BTC-USD' }) => {
     };
   }, [symbol, selectedInterval]);
 
+  // Placeholder function for price change calculation
+  const calculatePriceChangePercent = (currentPrice: number): number => {
+    // This is a placeholder. You would need to implement the actual logic to calculate the percentage change
+    // based on how you want to compute it, possibly fetching the previous price or using historical data
+    return 5.38; // Example percentage, replace with real calculation
+  };
+
   return (
-    <div className="w-full">
-      <div className="mb-4">
-        <select
-          value={selectedInterval.label}
-          onChange={(e) => {
-            const interval = INTERVALS.find(i => i.label === e.target.value);
-            if (interval) setSelectedInterval(interval);
-          }}
-          className="bg-gray-700 text-white px-3 py-2 rounded-md"
-        >
-          {INTERVALS.map((interval) => (
-            <option key={interval.label} value={interval.label}>
-              {interval.label}
-            </option>
-          ))}
-        </select>
+    <div className="w-full font-sans my-2">
+      <div className="flex flex-row mb-2">
+        <div className="">
+          <select
+            value={selectedInterval.label}
+            onChange={(e) => {
+              const interval = INTERVALS.find(i => i.label === e.target.value);
+              if (interval) setSelectedInterval(interval);
+            }}
+            className="bg-gray-700 text-white px-3 py-2 rounded-md"
+          >
+            {INTERVALS.map((interval) => (
+              <option key={interval.label} value={interval.label}>
+                {interval.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="flex justify-between gap-4 w-[700px] font-bold mx-4 text-sm">
+          <div className="flex-auto text-left w-1/4">
+            <div className="text-gray-400 text-xs">LAST PRICE (24H)</div>
+            <div>{intl.format(lastPrice as number)} &nbsp;
+              <span className={lastPriceChangePercent as number ? "text-[#24AC74]": "text-[#F0616D]"}>
+              {lastPriceChangePercent as number > 0 ? '+': '-'}{lastPriceChangePercent}%
+              </span>
+            </div>
+          </div>
+          <div className="flex-auto text-left w-1/4">
+            <div className="text-gray-400 text-xs">24H VOLUME</div>
+            <div>{intl.format(volume24h as number * 100000)}</div>
+          </div>
+          <div className="flex-auto text-left w-1/4">
+            <div className="text-gray-400 text-xs">24H HIGH</div>
+            <div>{intl.format(high24h as number)} </div>
+          </div>
+          <div className="flex-auto text-left w-1/4">
+            <div className="text-gray-400 text-xs">24H LOW</div>
+            <div>{intl.format(low24h as number)}</div>
+          </div>
+        </div>
       </div>
-      <div ref={chartContainerRef} className="w-full h-[400px]" />
+      <div ref={chartContainerRef} className="w-3/4 h-[400px]" />
     </div>
   );
 };
