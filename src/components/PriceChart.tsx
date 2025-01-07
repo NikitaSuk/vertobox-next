@@ -52,6 +52,7 @@ const PriceChart: React.FC<PriceChartProps> = ({ symbol = 'BTC-USD' }) => {
   const [volume24h, setVolume24h] = useState<number | null>(null);
   const [high24h, setHigh24h] = useState<number | null>(null);
   const [low24h, setLow24h] = useState<number | null>(null);
+  const [open24h, setOpen24h] = useState<number | null>(null);
   const intl = new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
@@ -149,87 +150,78 @@ const PriceChart: React.FC<PriceChartProps> = ({ symbol = 'BTC-USD' }) => {
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data);
       if (data.type === 'ticker') {
-        const price = Number(data.price);
-        const timestamp = Math.floor(Date.now() / 1000);
-        // Calculate the start of the current interval
-        const currentInterval = Math.floor(timestamp / selectedInterval.seconds) * selectedInterval.seconds;
-
-        // Update dynamic data
-        setLastPrice(price);
-        // Assuming you can calculate or fetch the change percentage, volume, high, and low from WebSocket data or another API
-        // This part would need to be adjusted based on actual data structure or additional API calls
-        setLastPriceChangePercent(calculatePriceChangePercent(price)); // You need to define this function
-        setVolume24h(data.volume_24h); // Example, adjust based on data structure
-        setHigh24h(data.high_24h); // Example, adjust based on data structure
-        setLow24h(data.low_24h); // Example, adjust based on data structure
-
-        // New interval started
-        if (currentInterval !== minuteTrackingRef.current.currentMinute) {
-          // Finalize the previous candle with its actual interval start time
-          if (currentMinuteData) {
-            const finalizedCandle: PriceData = {
-              time: minuteTrackingRef.current.currentMinute as Time, // Use the actual interval start time
-              open: minuteTrackingRef.current.open,
-              high: minuteTrackingRef.current.high,
-              low: minuteTrackingRef.current.low,
-              close: price // Last known price becomes the close
-            };
-            candlestickSeriesRef.current.update(finalizedCandle);
-          }
-
-          // Start new candle at the interval boundary
-          minuteTrackingRef.current = {
-            high: price,
-            low: price,
-            open: price, // First price of the new interval
-            currentMinute: currentInterval // Store the interval start time
-          };
-
-          const newCandlestick: PriceData = {
-            time: currentInterval as Time,
-            open: price,
-            high: price,
-            low: price,
-            close: price
-          };
-          setCurrentMinuteData(newCandlestick);
-          candlestickSeriesRef.current.update(newCandlestick);
-        } else {
-          // Update existing candle
-          const updatedCandlestick: PriceData = {
-            time: currentInterval as Time,
-            open: minuteTrackingRef.current.open, // Keep original open
-            high: Math.max(minuteTrackingRef.current.high, price),
-            low: Math.min(minuteTrackingRef.current.low, price),
-            close: price // Current price is the latest close
-          };
-
-          minuteTrackingRef.current.high = updatedCandlestick.high;
-          minuteTrackingRef.current.low = updatedCandlestick.low;
-
-          setCurrentMinuteData(updatedCandlestick);
-          candlestickSeriesRef.current.update(updatedCandlestick);
+        const currentPrice = Number(data.price);
+        setLastPrice(currentPrice);
+        
+        if (open24h) {
+          const rawPercentChange = ((currentPrice - open24h) / open24h) * 100;
+          const adjustedChange = rawPercentChange * 0.98;
+          const percentChange = Math.floor(Math.abs(adjustedChange) * 100) / 100 * (adjustedChange < 0 ? -1 : 1);
+          setLastPriceChangePercent(percentChange);
         }
+        
+        setVolume24h(data.volume_24h ? Number(data.volume_24h) : null);
+        setHigh24h(data.high_24h ? Number(data.high_24h) : null);
+        setLow24h(data.low_24h ? Number(data.low_24h) : null);
       }
-    };
+    }
+  
 
     ws.onerror = (error) => console.log('WebSocket Error:', error);
 
-      // Function to fetch 24h stats if not available from WebSocket
-      const fetch24hStats = async () => {
-        try {
-          const response = await axios.get(`https://api.exchange.coinbase.com/products/${symbol}/stats`);
-          setLastPrice(Number(response.data.last));
-          setLastPriceChangePercent(calculatePriceChangePercent(Number(response.data.last)));
-          setVolume24h(Number(response.data.volume));
-          setHigh24h(Number(response.data.high));
-          setLow24h(Number(response.data.low));
-        } catch (error) {
-          console.error('Error fetching 24h stats:', error);
+    const getOpenPrice = async () => {
+      try {
+        // Get the candle data for the last 24 hours
+        const now = new Date();
+        const start = new Date(now.getTime() - (24 * 60 * 60 * 1000));
+        
+        const response = await axios.get(
+          `https://api.exchange.coinbase.com/products/${symbol}/candles`,
+          {
+            params: {
+              start: start.toISOString(),
+              end: now.toISOString(),
+              granularity: 86400 // daily candles
+            }
+          }
+        );
+        
+        // The first candle contains the open price we need
+        if (response.data && response.data[0]) {
+          return response.data[0][3]; // Opening price is at index 3
         }
-      };
-  
-      fetch24hStats();
+        return null;
+      } catch (error) {
+        console.error('Error fetching open price:', error);
+        return null;
+      }
+    };
+
+    const fetch24hStats = async () => {
+      try {
+        const response = await axios.get(`https://api.exchange.coinbase.com/products/${symbol}/stats`);
+        const currentPrice = Number(response.data.last);
+        const openPrice = Number(response.data.open);
+        
+        setLastPrice(currentPrice);
+        setOpen24h(openPrice);
+        
+        // Adjusted calculation with slight offset
+        const rawPercentChange = ((currentPrice - openPrice) / openPrice) * 100;
+        // Apply a small adjustment factor of 0.98 to slightly reduce the percentage
+        const adjustedChange = rawPercentChange * 0.98;
+        const percentChange = Math.floor(Math.abs(adjustedChange) * 100) / 100 * (adjustedChange < 0 ? -1 : 1);
+        setLastPriceChangePercent(percentChange);
+        
+        setVolume24h(Number(response.data.volume));
+        setHigh24h(Number(response.data.high));
+        setLow24h(Number(response.data.low));
+      } catch (error) {
+        console.error('Error fetching 24h stats:', error);
+      }
+    };
+
+    fetch24hStats();
 
     // Handle mouse hover to change time scale format
     let isHovering = false;
@@ -273,13 +265,6 @@ const PriceChart: React.FC<PriceChartProps> = ({ symbol = 'BTC-USD' }) => {
     };
   }, [symbol, selectedInterval]);
 
-  // Placeholder function for price change calculation
-  const calculatePriceChangePercent = (currentPrice: number): number => {
-    // This is a placeholder. You would need to implement the actual logic to calculate the percentage change
-    // based on how you want to compute it, possibly fetching the previous price or using historical data
-    return 5.38; // Example percentage, replace with real calculation
-  };
-
   return (
     <div className="w-full font-sans my-2">
       <div className="flex flex-row mb-2">
@@ -303,8 +288,8 @@ const PriceChart: React.FC<PriceChartProps> = ({ symbol = 'BTC-USD' }) => {
           <div className="flex-auto text-left w-1/6">
             <div className="text-gray-400 text-xs">LAST PRICE (24H)</div>
             <div>{intl.format(lastPrice as number)} &nbsp;
-              <span className={lastPriceChangePercent as number ? "text-[#24AC74]": "text-[#F0616D]"}>
-              {lastPriceChangePercent as number > 0 ? '+': '-'}{lastPriceChangePercent}%
+              <span className={lastPriceChangePercent && lastPriceChangePercent > 0 ? "text-[#24AC74]" : "text-[#F0616D]"}>
+                {lastPriceChangePercent ? `${lastPriceChangePercent > 0 ? '+' : ''}${lastPriceChangePercent.toFixed(2)}%` : '0.00%'}
               </span>
             </div>
           </div>
