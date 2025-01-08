@@ -1,6 +1,9 @@
 // pages/index.tsx
 import React from 'react';
-import PriceChart from '@/components/PriceChart';
+import PriceChart from '@/components/technical/PriceChart';
+
+import "normalize.css";
+import "@blueprintjs/core/lib/css/blueprint.css";
 
 const Home: React.FC = () => {
   return (

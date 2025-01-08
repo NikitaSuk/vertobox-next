@@ -1,0 +1,17 @@
+.segmented-control-custom {
+  background-color: #1c1c1e !important;
+  border-radius: 6px !important;
+  padding: 3px !important;
+  outline: none !important;
+  button:focus {
+
+  }
+}
+
+.segmented-control-custom button:focus {
+  --tw-ring-color: transparent !important;
+  --tw-ring-offset-width: 0 !important;
+  --tw-ring-shadow: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+}

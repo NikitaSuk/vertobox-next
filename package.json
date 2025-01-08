@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@blueprintjs/core": "^5.16.2",
     "axios": "^1.7.9",
     "lightweight-charts": "^4.2.2",
     "next": "15.1.3",

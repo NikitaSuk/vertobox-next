@@ -3,6 +3,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createChart, CandlestickData, Time, ColorType, ITimeScaleApi } from 'lightweight-charts';
 import axios from 'axios';
+import { SegmentedControl } from '@blueprintjs/core';
+import './PriceChart.css'
 
 interface PriceChartProps {
   symbol: string;
@@ -34,6 +36,15 @@ const INTERVALS: Interval[] = [
   { label: '1 day', seconds: 86400, granularity: 86400 },
 ];
 
+const ControlIntervals = [
+  { label: "1M", value: "60" },
+  { label: "5M", value: "300" },
+  { label: "15M", value: "900" },
+  { label: "1H", value: "3600" },
+  { label: "6H", value: "21600" },
+  { label: "1D", value: "86400" },
+];
+
 const PriceChart: React.FC<PriceChartProps> = ({ symbol = 'BTC-USD' }) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<any>(null);
@@ -56,7 +67,7 @@ const PriceChart: React.FC<PriceChartProps> = ({ symbol = 'BTC-USD' }) => {
   const intl = new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
-});
+  });
 
   useEffect(() => {
     if (!chartContainerRef.current) return;
@@ -152,20 +163,20 @@ const PriceChart: React.FC<PriceChartProps> = ({ symbol = 'BTC-USD' }) => {
       if (data.type === 'ticker') {
         const currentPrice = Number(data.price);
         setLastPrice(currentPrice);
-        
+
         if (open24h) {
           const rawPercentChange = ((currentPrice - open24h) / open24h) * 100;
           const adjustedChange = rawPercentChange * 0.98;
           const percentChange = Math.floor(Math.abs(adjustedChange) * 100) / 100 * (adjustedChange < 0 ? -1 : 1);
           setLastPriceChangePercent(percentChange);
         }
-        
+
         setVolume24h(data.volume_24h ? Number(data.volume_24h) : null);
         setHigh24h(data.high_24h ? Number(data.high_24h) : null);
         setLow24h(data.low_24h ? Number(data.low_24h) : null);
       }
     }
-  
+
 
     ws.onerror = (error) => console.log('WebSocket Error:', error);
 
@@ -174,7 +185,7 @@ const PriceChart: React.FC<PriceChartProps> = ({ symbol = 'BTC-USD' }) => {
         // Get the candle data for the last 24 hours
         const now = new Date();
         const start = new Date(now.getTime() - (24 * 60 * 60 * 1000));
-        
+
         const response = await axios.get(
           `https://api.exchange.coinbase.com/products/${symbol}/candles`,
           {
@@ -185,7 +196,7 @@ const PriceChart: React.FC<PriceChartProps> = ({ symbol = 'BTC-USD' }) => {
             }
           }
         );
-        
+
         // The first candle contains the open price we need
         if (response.data && response.data[0]) {
           return response.data[0][3]; // Opening price is at index 3
@@ -202,17 +213,17 @@ const PriceChart: React.FC<PriceChartProps> = ({ symbol = 'BTC-USD' }) => {
         const response = await axios.get(`https://api.exchange.coinbase.com/products/${symbol}/stats`);
         const currentPrice = Number(response.data.last);
         const openPrice = Number(response.data.open);
-        
+
         setLastPrice(currentPrice);
         setOpen24h(openPrice);
-        
+
         // Adjusted calculation with slight offset
         const rawPercentChange = ((currentPrice - openPrice) / openPrice) * 100;
         // Apply a small adjustment factor of 0.98 to slightly reduce the percentage
         const adjustedChange = rawPercentChange * 0.98;
         const percentChange = Math.floor(Math.abs(adjustedChange) * 100) / 100 * (adjustedChange < 0 ? -1 : 1);
         setLastPriceChangePercent(percentChange);
-        
+
         setVolume24h(Number(response.data.volume));
         setHigh24h(Number(response.data.high));
         setLow24h(Number(response.data.low));
@@ -230,9 +241,9 @@ const PriceChart: React.FC<PriceChartProps> = ({ symbol = 'BTC-USD' }) => {
       (timeScale as any).applyOptions({
         tickMarkFormatter: (time: Time) => {
           const date = new Date(time as number * 1000);
-          const day = date.getDate();
-          const month = date.toLocaleString('default', { month: 'short' });
-          const year = date.getFullYear().toString().slice(-2);
+          // const day = date.getDate();
+          // const month = date.toLocaleString('default', { month: 'short' });
+          // const year = date.getFullYear().toString().slice(-2);
           const minutes = String(date.getMinutes()).padStart(2, '0');
           return `${date.getHours()}:${minutes}`;
         }
@@ -267,24 +278,10 @@ const PriceChart: React.FC<PriceChartProps> = ({ symbol = 'BTC-USD' }) => {
 
   return (
     <div className="w-full font-sans my-2">
-      <div className="flex flex-row mb-2">
-        <div className="">
-          <select
-            value={selectedInterval.label}
-            onChange={(e) => {
-              const interval = INTERVALS.find(i => i.label === e.target.value);
-              if (interval) setSelectedInterval(interval);
-            }}
-            className="bg-gray-700 text-white px-3 py-2 rounded-md"
-          >
-            {INTERVALS.map((interval) => (
-              <option key={interval.label} value={interval.label}>
-                {interval.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="flex justify-between gap-4 w-[700px] font-semibold mx-4 text-sm">
+      <div className="w-3/4 flex flex-row mb-2">
+        
+        {/* Market Data [start] */}
+        <div className="flex justify-between gap-4 w-3/4 font-semibold mx-4 text-sm">
           <div className="flex-auto text-left w-1/6">
             <div className="text-gray-400 text-xs">LAST PRICE (24H)</div>
             <div>{intl.format(lastPrice as number)} &nbsp;
@@ -306,6 +303,29 @@ const PriceChart: React.FC<PriceChartProps> = ({ symbol = 'BTC-USD' }) => {
             <div>{intl.format(low24h as number)}</div>
           </div>
         </div>
+        {/* Market Data [end] */}
+
+        {/* Interval Selection [start] */}
+        <div className='w-1/4'>
+          <SegmentedControl
+            options={ControlIntervals}
+            value={selectedInterval.granularity.toString()}
+            defaultValue={ControlIntervals[0].value}
+            onValueChange={(value: any) => {
+              const interval = ControlIntervals.find(i => i.value === value);
+              if (interval) {
+                setSelectedInterval({
+                  label: interval.label,
+                  seconds: Number(interval.value),
+                  granularity: Number(interval.value)
+                });
+              }
+            }}
+            className="segmented-control-custom"
+          />
+        </div>
+        {/* Interval Selection [end] */}
+
       </div>
       <div ref={chartContainerRef} className="w-3/4 h-[400px]" />
     </div>
